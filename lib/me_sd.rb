@@ -113,6 +113,9 @@ class ServiceDesk
       request.add_field("Referer", "http://#{session[:host]}:#{session[:port]}/WOListView.do")
       @curobj = get_curobj(@current_body)
       return false unless @curobj
+      p @curobj["_FI"]
+      p @curobj["_TL"]
+      puts "#{@curobj["_FI"].to_i / @curobj["_TL"].to_i * 100}%"
       # increment page number
       @curobj["_PN"] = (@curobj["_PN"].to_i + 1).to_s
       # update first item
