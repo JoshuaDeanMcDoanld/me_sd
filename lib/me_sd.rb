@@ -19,7 +19,6 @@ class ServiceDesk
     "DNT" => "1",
     "Connection:" => "keep-alive",
   }
-  REQUESTS_PER_PAGE = 25
 
   def initialize(host, port = 80, username, password)
     require "net/http"
@@ -117,7 +116,7 @@ class ServiceDesk
       # increment page number
       @curobj["_PN"] = (@curobj["_PN"].to_i + 1).to_s
       # update first item
-      @curobj["_FI"] = (@curobj["_FI"].to_i + REQUESTS_PER_PAGE).to_s
+      @curobj["_FI"] = (@curobj["_FI"].to_i + @curobj["_PL"].to_i).to_s
       # @curobj.flatten.join("/") =>
       # "_PN/2/_PL/25/_TL/28/globalViewName/All_Requests/_TI/25/_FI/1/_SO/D/viewName/All_Requests"
       request.add_field("Cookie",
