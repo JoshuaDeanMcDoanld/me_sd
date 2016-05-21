@@ -10,7 +10,7 @@
 # => #<ServiceDesk::Request:0x0000000265d360 @id="29", @description="request decription", @resolution="request resolution">
 
 class ServiceDesk
-  attr_accessor :session, :errors, :curobj, :current_body, :requests
+  attr_accessor :session, :errors, :curobj, :current_body, :requests, :last_error
 
   HEADERS = {
     "User-Agent" => "Mozilla/5.0 (Windows NT 6.1; rv:22.0) Gecko/20100101 Firefox/22.0",
@@ -170,50 +170,59 @@ class ServiceDesk
 
   def get_request_data(request)
     if session_healthy?
-      # description
-      uri = URI("http://#{@session[:host]}:#{@session[:port]}/WorkOrder.do?woMode=viewWO&woID=#{request.id}")
-      Net::HTTP.start(uri.host, uri.port) do |http|
-        http_request = Net::HTTP::Get.new(uri)
-        http_request.add_field("Cookie", "#{@session[:cookie]}")
-        http_request = http.request(http_request)
-        body = http_request.response.body
-        # body =>
-        # <td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">
-        # \n\n\t\t\t\tDESCRIPTION\n\t\t\t\t
-        # </td>
-        search_place_start = "<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">"
-        search_place_end = "</td>"
-        search_place_start_pos = body.index(search_place_start)
-        search_place_end_pos = body.index(search_place_end, search_place_start_pos)
-        request.description = body[search_place_start_pos + search_place_start.size..search_place_end_pos-1]
-        # request.description => "\n\t\t\t\t\tDESCRIPTION\n\t\t\t\t"
-        request.description = request.description.force_encoding('UTF-8').lstrip.rstrip
-        # request.description => "DESCRIPTION"
-      end
-      # resolution
-      uri = URI("http://#{@session[:host]}:#{@session[:port]}/AddResolution.do?mode=viewWOResolution&woID=#{request.id}")
-      Net::HTTP.start(uri.host, uri.port) do |http|
-        http_request = Net::HTTP::Get.new(uri)
-        http_request.add_field("Cookie", "#{@session[:cookie]}")
-        http_request = http.request(http_request)
-        body = http_request.response.body
-        # body =>
-        # ...
-        # <td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">
-        # \n\t\t\t\t\tRESOLUTION\n\t\t\t\t
-        # </td>
-        # ...
-        search_place_start = "<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">"
-        search_place_end = "</td>"
-        search_place_start_pos = body.index(search_place_start)
-        search_place_end_pos = body.index(search_place_end, search_place_start_pos)
-        request.resolution = body[search_place_start_pos + search_place_start.size..search_place_end_pos-1]
-        # request.resolution => "\n\t\t\t\t\tRESOLUTION\n\t\t\t\t"
-        request.resolution = request.resolution.force_encoding('UTF-8').lstrip.rstrip
-        # request.resolution => "RESOLUTION"
+      properties = [
+        {
+          name: "description",
+          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+          search_algorithm: {
+            name: "between_strings",
+            lower_bound: "<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">",
+            upper_bound: "</td>",
+          },
+        },
+        {
+          name: "resolution",
+          url: "AddResolution.do?mode=viewWOResolution&woID=#{request.id}",
+          search_algorithm: {
+            name: "between_strings",
+            lower_bound: "<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">",
+            upper_bound: "</td>",
+          },
+        },
+      ]
+      properties.each do |property|
+        uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
+        Net::HTTP.start(uri.host, uri.port) do |http|
+          http_request = Net::HTTP::Get.new(uri)
+          http_request.add_field("Cookie", "#{@session[:cookie]}")
+          http_request = http.request(http_request)
+          body = http_request.response.body
+          auth_error_pos = body.index("AuthError")
+          if auth_error_pos
+            @last_error = "auth error"
+            return false
+          end
+          operational_error_pos = body.index("failurebox")
+          if operational_error_pos
+            @last_error = "operational error"
+            return false
+          end
+          if property[:search_algorithm][:name] == "between_strings"
+            search_place_start = "<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">"
+            search_place_end = "</td>"
+            search_start_pos = body.index(property[:search_algorithm][:lower_bound])
+            search_end_pos = body.index(property[:search_algorithm][:upper_bound], search_start_pos)
+            value = body[search_start_pos + property[:search_algorithm][:lower_bound].size..search_end_pos-1]
+            # value => "\n\t\t\t\t\tVALUE\n\t\t\t\t"
+            value = value.force_encoding("UTF-8").strip
+            # value => "VALUE"
+            request.send("#{property[:name]}=", value)
+          end
+        end
       end
       request
     else
+      @last_error = "session error"
       return false
     end
   end
@@ -221,7 +230,7 @@ class ServiceDesk
   private :select_all_requests, :next_page, :get_curobj, :get_requests_urls
 
   class Request
-    attr_accessor :id, :resolution, :description
+    attr_accessor :id, :description, :resolution
 
     def initialize(args)
       if args[:url]
