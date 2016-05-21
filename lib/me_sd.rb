@@ -191,9 +191,7 @@ class ServiceDesk
             name: "value_between_strings",
             args: ["<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
           },
-          post_processing_functions: [{
-            name: :strip,
-          }],
+          post_processing_functions: [:strip],
         },
         {
           name: "resolution",
@@ -202,9 +200,7 @@ class ServiceDesk
             name: "value_between_strings",
             args: ["<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
           },
-          post_processing_functions: [{
-            name: :strip,
-          }],
+          post_processing_functions: [:strip],
         },
         {
           name: "status",
@@ -213,10 +209,7 @@ class ServiceDesk
             name: "html_parse",
             args: [["css", "#WOHeaderSummary_DIV"], ["css", "#status_PH"], "text"],
           },
-          post_processing_functions: [
-            { name: :semicolon_space_value },
-            { name: :symbolize },
-          ],
+          post_processing_functions: [:semicolon_space_value, :symbolize],
         },
         {
           name: "priority",
@@ -225,10 +218,7 @@ class ServiceDesk
             name: "html_parse",
             args: [["css", "#WOHeaderSummary_DIV"], ["css", "#priority_PH"], "text"],
           },
-          post_processing_functions: [
-            { name: :semicolon_space_value },
-            { name: :symbolize },
-          ],
+          post_processing_functions: [:semicolon_space_value, :symbolize],
         },
         {
           name: "author_name",
@@ -253,9 +243,7 @@ class ServiceDesk
             name: "html_parse",
             args: [["css", "#requestSubject_ID"], "text"],
           },
-          post_processing_functions: [{
-            name: :strip,
-          }],
+          post_processing_functions: [:strip],
         },
       ]
       properties.each do |property|
@@ -280,10 +268,10 @@ class ServiceDesk
           if property[:post_processing_functions]
             functions = property[:post_processing_functions]
             functions.each do |function|
-              if value.methods.include?(function[:name])
-                value = value.method(function[:name]).call
-              elsif self.private_methods.include?(function[:name])
-                value = self.method(function[:name]).call(value)
+              if value.methods.include?(function)
+                value = value.method(function).call
+              elsif self.private_methods.include?(function)
+                value = self.method(function).call(value)
               end
             end
           end
@@ -324,6 +312,7 @@ class ServiceDesk
       :on_hold => ["Ожидание", "On Hold"],
       :resolved => ["Решена", "Resolved"],
       :closed => ["Закрыта", "Closed"],
+      :rejected => ["Отклонена", ""],
       # priority
       :minimal => ["Минимальный", ""],
       :low => ["Низкий", "Low"],
