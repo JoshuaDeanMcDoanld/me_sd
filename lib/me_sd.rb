@@ -213,6 +213,14 @@ class ServiceDesk
             name: "semicolon_space_value",
           },
         },
+        {
+          name: "author_name",
+          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+          search_function: {
+            name: "html_parse",
+            args: [["css", "#requesterName_PH"], "text"],
+          },
+        },
       ]
       properties.each do |property|
         uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
@@ -268,10 +276,10 @@ class ServiceDesk
     value.strip[/:(.*)/m, 1].strip
   end
 
-  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls, :html_parse, :value_between_strings
+  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls, :html_parse, :value_between_strings, :semicolon_space_value
 
   class Request
-    attr_accessor :id, :status, :priority, :description, :resolution
+    attr_accessor :id, :author_name, :status, :priority, :description, :resolution
 
     def initialize(args)
       if args[:url]
