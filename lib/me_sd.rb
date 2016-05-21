@@ -8,6 +8,10 @@
 #   requests[0]
 # end
 # => #<ServiceDesk::Request:0x0000000265d360 @id="29", @description="request decription", @resolution="request resolution">
+# request = ServiceDesk::Request.new({id: "117711"})
+# sd.get_request_data(request)
+# sd.last_error
+# => "auth error"
 
 class ServiceDesk
   attr_accessor :session, :errors, :curobj, :current_body, :requests, :last_error
@@ -208,8 +212,6 @@ class ServiceDesk
             return false
           end
           if property[:search_algorithm][:name] == "between_strings"
-            search_place_start = "<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">"
-            search_place_end = "</td>"
             search_start_pos = body.index(property[:search_algorithm][:lower_bound])
             search_end_pos = body.index(property[:search_algorithm][:upper_bound], search_start_pos)
             value = body[search_start_pos + property[:search_algorithm][:lower_bound].size..search_end_pos-1]
