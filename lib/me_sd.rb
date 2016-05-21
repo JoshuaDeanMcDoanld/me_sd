@@ -191,9 +191,9 @@ class ServiceDesk
             name: "value_between_strings",
             args: ["<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
           },
-          post_processing_function: {
+          post_processing_functions: [{
             name: :strip,
-          },
+          }],
         },
         {
           name: "resolution",
@@ -202,9 +202,9 @@ class ServiceDesk
             name: "value_between_strings",
             args: ["<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
           },
-          post_processing_function: {
+          post_processing_functions: [{
             name: :strip,
-          },
+          }],
         },
         {
           name: "status",
@@ -213,9 +213,10 @@ class ServiceDesk
             name: "html_parse",
             args: [["css", "#WOHeaderSummary_DIV"], ["css", "#status_PH"], "text"],
           },
-          post_processing_function: {
-            name: :semicolon_space_value,
-          },
+          post_processing_functions: [
+            { name: :semicolon_space_value },
+            { name: :symbolize },
+          ],
         },
         {
           name: "priority",
@@ -224,9 +225,10 @@ class ServiceDesk
             name: "html_parse",
             args: [["css", "#WOHeaderSummary_DIV"], ["css", "#priority_PH"], "text"],
           },
-          post_processing_function: {
-            name: :semicolon_space_value,
-          },
+          post_processing_functions: [
+            { name: :semicolon_space_value },
+            { name: :symbolize },
+          ],
         },
         {
           name: "author_name",
@@ -251,13 +253,13 @@ class ServiceDesk
             name: "html_parse",
             args: [["css", "#requestSubject_ID"], "text"],
           },
-          post_processing_function: {
+          post_processing_functions: [{
             name: :strip,
-          },
+          }],
         },
       ]
       properties.each do |property|
-        next if !only.empty? && only.include?(property[:name])
+        next if !only.empty? && !only.include?(property[:name])
         uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
         Net::HTTP.start(uri.host, uri.port) do |http|
           http_request = Net::HTTP::Get.new(uri)
@@ -275,12 +277,14 @@ class ServiceDesk
             return false
           end
           value = self.method(property[:search_function][:name]).call(property[:search_function][:args])
-          if property[:post_processing_function]
-            function_name = property[:post_processing_function][:name]
-            if value.methods.include?(function_name)
-              value = value.method(function_name).call
-            elsif self.private_methods.include?(function_name)
-              value = self.method(function_name).call(value)
+          if property[:post_processing_functions]
+            functions = property[:post_processing_functions]
+            functions.each do |function|
+              if value.methods.include?(function[:name])
+                value = value.method(function[:name]).call
+              elsif self.private_methods.include?(function[:name])
+                value = self.method(function[:name]).call(value)
+              end
             end
           end
           request.send("#{property[:name]}=", value)
@@ -296,7 +300,7 @@ class ServiceDesk
   def html_parse(steps)
     require "nokogiri"
     value = Nokogiri::HTML(@current_body)
-    steps.each { |step| value = value.send(*step) }
+    Array(steps).each { |step| value = value.send(*step) }
     value
   end
 
@@ -313,7 +317,29 @@ class ServiceDesk
     value.strip[/:(.*)/m, 1].strip
   end
 
-  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls, :html_parse, :value_between_strings, :semicolon_space_value
+  def symbolize(value)
+    matching = {
+      # status
+      :open => ["Открыта", "Open"],
+      :on_hold => ["Ожидание", "On Hold"],
+      :resolved => ["Решена", "Resolved"],
+      :closed => ["Закрыта", "Closed"],
+      # priority
+      :minimal => ["Минимальный", ""],
+      :low => ["Низкий", "Low"],
+      :normal => ["", "Normal"],
+      :medium => ["Средний", "Medium"],
+      :high => ["Высокий", "High"],
+      :highest => ["Наивысший", ""],
+    }
+    matching.each do |result, candidates|
+      return result if candidates.include?(value)
+    end
+    false
+  end
+
+  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls,
+    :html_parse, :value_between_strings, :semicolon_space_value, :symbolize
 
   class Request
     attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
