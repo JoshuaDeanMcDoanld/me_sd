@@ -172,7 +172,14 @@ class ServiceDesk
     urls
   end
 
-  def get_request_data(request)
+  def get_request_data(args)
+    if args.class == ServiceDesk::Request
+      request = args
+      only = []
+    else
+      request = args[:request]
+      only = defined?(args[:only]) ? args[:only] : []
+    end
     if session_healthy?
       properties = [
         {
@@ -231,6 +238,7 @@ class ServiceDesk
         },
       ]
       properties.each do |property|
+        next unless only.include?(property[:name])
         uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
         Net::HTTP.start(uri.host, uri.port) do |http|
           http_request = Net::HTTP::Get.new(uri)
