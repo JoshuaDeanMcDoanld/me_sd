@@ -176,7 +176,7 @@ class ServiceDesk
     if args.class == ServiceDesk::Request
       request = args
       only = []
-    else
+    elsif args.class == Hash
       request = args[:request]
       only = defined?(args[:only]) ? args[:only] : []
     end
@@ -206,7 +206,7 @@ class ServiceDesk
             args: [["css", "#WOHeaderSummary_DIV"], ["css", "#status_PH"], "text"],
           },
           post_processing_function: {
-            name: "semicolon_space_value",
+            name: :semicolon_space_value,
           },
         },
         {
@@ -217,7 +217,7 @@ class ServiceDesk
             args: [["css", "#WOHeaderSummary_DIV"], ["css", "#priority_PH"], "text"],
           },
           post_processing_function: {
-            name: "semicolon_space_value",
+            name: :semicolon_space_value,
           },
         },
         {
@@ -236,9 +236,20 @@ class ServiceDesk
             args: [["css", "#CREATEDTIME_CUR"], "text"],
           },
         },
+        {
+          name: "name",
+          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+          search_function: {
+            name: "html_parse",
+            args: [["css", "#requestSubject_ID"], "text"],
+          },
+          post_processing_function: {
+            name: :strip,
+          },
+        },
       ]
       properties.each do |property|
-        next unless only.include?(property[:name])
+        next if !only.empty? && only.include?(property[:name])
         uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
         Net::HTTP.start(uri.host, uri.port) do |http|
           http_request = Net::HTTP::Get.new(uri)
@@ -257,7 +268,12 @@ class ServiceDesk
           end
           value = self.method(property[:search_function][:name]).call(property[:search_function][:args])
           if property[:post_processing_function]
-            value = self.method(property[:post_processing_function][:name]).call(value)
+            function_name = property[:post_processing_function][:name]
+            if value.methods.include?(function_name)
+              value = value.method(function_name).call
+            elsif self.private_methods.include?(function_name)
+              value = self.method(function_name).call(value)
+            end
           end
           request.send("#{property[:name]}=", value)
         end
@@ -295,7 +311,7 @@ class ServiceDesk
   private :select_all_requests, :next_page, :get_curobj, :get_requests_urls, :html_parse, :value_between_strings, :semicolon_space_value
 
   class Request
-    attr_accessor :id, :author_name, :status, :priority, :create_date, :description, :resolution
+    attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
 
     def initialize(args)
       if args[:url]
