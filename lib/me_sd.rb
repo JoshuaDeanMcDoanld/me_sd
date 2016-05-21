@@ -7,11 +7,13 @@
 #   sd.get_request_data(requests[0])
 #   requests[0]
 # end
-# => #<ServiceDesk::Request:0x0000000265d360 @id="29", @description="request decription", @resolution="request resolution">
+# => #<ServiceDesk::Request:0x0000000265d360 @id="29", @description="request decription", @resolution="request resolution", ...>
 # request = ServiceDesk::Request.new({id: "117711"})
 # sd.get_request_data(request)
 # sd.last_error
 # => "auth error"
+# sd.get_request_data({ request: request, only: ["name"] })
+# => #<ServiceDesk::Request:0x000000023b6800 @id="29", @name="my_request">
 
 class ServiceDesk
   attr_accessor :session, :errors, :curobj, :current_body, :requests, :last_error
@@ -189,6 +191,9 @@ class ServiceDesk
             name: "value_between_strings",
             args: ["<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
           },
+          post_processing_function: {
+            name: :strip,
+          },
         },
         {
           name: "resolution",
@@ -196,6 +201,9 @@ class ServiceDesk
           search_function: {
             name: "value_between_strings",
             args: ["<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
+          },
+          post_processing_function: {
+            name: :strip,
           },
         },
         {
@@ -283,13 +291,12 @@ class ServiceDesk
       @last_error = "session error"
       return false
     end
-
   end
 
   def html_parse(steps)
     require "nokogiri"
     value = Nokogiri::HTML(@current_body)
-    steps.each { |step| value = value.send(*step)}
+    steps.each { |step| value = value.send(*step) }
     value
   end
 
@@ -298,9 +305,7 @@ class ServiceDesk
     return false unless search_start_pos
     search_end_pos = @current_body.index(bounds[1], search_start_pos)
     value = @current_body[search_start_pos + bounds[0].size..search_end_pos-1]
-    # value => "\n\t\t\t\t\tVALUE\n\t\t\t\t"
-    value = value.force_encoding("UTF-8").strip
-    # value => "VALUE"
+    value = value.force_encoding("UTF-8")
     value
   end
 
