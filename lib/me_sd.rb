@@ -221,6 +221,14 @@ class ServiceDesk
             args: [["css", "#requesterName_PH"], "text"],
           },
         },
+        {
+          name: "create_date",
+          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+          search_function: {
+            name: "html_parse",
+            args: [["css", "#CREATEDTIME_CUR"], "text"],
+          },
+        },
       ]
       properties.each do |property|
         uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
@@ -279,7 +287,7 @@ class ServiceDesk
   private :select_all_requests, :next_page, :get_curobj, :get_requests_urls, :html_parse, :value_between_strings, :semicolon_space_value
 
   class Request
-    attr_accessor :id, :author_name, :status, :priority, :description, :resolution
+    attr_accessor :id, :author_name, :status, :priority, :create_date, :description, :resolution
 
     def initialize(args)
       if args[:url]
