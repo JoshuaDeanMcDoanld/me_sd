@@ -178,19 +178,39 @@ class ServiceDesk
         {
           name: "description",
           url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
-          search_algorithm: {
-            name: "between_strings",
-            lower_bound: "<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">",
-            upper_bound: "</td>",
+          search_function: {
+            name: "value_between_strings",
+            args: ["<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
           },
         },
         {
           name: "resolution",
           url: "AddResolution.do?mode=viewWOResolution&woID=#{request.id}",
-          search_algorithm: {
-            name: "between_strings",
-            lower_bound: "<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">",
-            upper_bound: "</td>",
+          search_function: {
+            name: "value_between_strings",
+            args: ["<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
+          },
+        },
+        {
+          name: "status",
+          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+          search_function: {
+            name: "html_parse",
+            args: [["css", "#WOHeaderSummary_DIV"], ["css", "#status_PH"], "text"],
+          },
+          post_processing_function: {
+            name: "semicolon_space_value",
+          },
+        },
+        {
+          name: "priority",
+          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+          search_function: {
+            name: "html_parse",
+            args: [["css", "#WOHeaderSummary_DIV"], ["css", "#priority_PH"], "text"],
+          },
+          post_processing_function: {
+            name: "semicolon_space_value",
           },
         },
       ]
@@ -200,26 +220,22 @@ class ServiceDesk
           http_request = Net::HTTP::Get.new(uri)
           http_request.add_field("Cookie", "#{@session[:cookie]}")
           http_request = http.request(http_request)
-          body = http_request.response.body
-          auth_error_pos = body.index("AuthError")
+          @current_body = http_request.response.body
+          auth_error_pos = @current_body.index("AuthError")
           if auth_error_pos
             @last_error = "auth error"
             return false
           end
-          operational_error_pos = body.index("failurebox")
+          operational_error_pos = @current_body.index("failurebox")
           if operational_error_pos
             @last_error = "operational error"
             return false
           end
-          if property[:search_algorithm][:name] == "between_strings"
-            search_start_pos = body.index(property[:search_algorithm][:lower_bound])
-            search_end_pos = body.index(property[:search_algorithm][:upper_bound], search_start_pos)
-            value = body[search_start_pos + property[:search_algorithm][:lower_bound].size..search_end_pos-1]
-            # value => "\n\t\t\t\t\tVALUE\n\t\t\t\t"
-            value = value.force_encoding("UTF-8").strip
-            # value => "VALUE"
-            request.send("#{property[:name]}=", value)
+          value = self.method(property[:search_function][:name]).call(property[:search_function][:args])
+          if property[:post_processing_function]
+            value = self.method(property[:post_processing_function][:name]).call(value)
           end
+          request.send("#{property[:name]}=", value)
         end
       end
       request
@@ -227,12 +243,35 @@ class ServiceDesk
       @last_error = "session error"
       return false
     end
+
   end
 
-  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls
+  def html_parse(steps)
+    require "nokogiri"
+    value = Nokogiri::HTML(@current_body)
+    steps.each { |step| value = value.send(*step)}
+    value
+  end
+
+  def value_between_strings(bounds)
+    search_start_pos = @current_body.index(bounds[0])
+    return false unless search_start_pos
+    search_end_pos = @current_body.index(bounds[1], search_start_pos)
+    value = @current_body[search_start_pos + bounds[0].size..search_end_pos-1]
+    # value => "\n\t\t\t\t\tVALUE\n\t\t\t\t"
+    value = value.force_encoding("UTF-8").strip
+    # value => "VALUE"
+    value
+  end
+
+  def semicolon_space_value(value)
+    value.strip[/:(.*)/m, 1].strip
+  end
+
+  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls, :html_parse, :value_between_strings
 
   class Request
-    attr_accessor :id, :description, :resolution
+    attr_accessor :id, :status, :priority, :description, :resolution
 
     def initialize(args)
       if args[:url]
