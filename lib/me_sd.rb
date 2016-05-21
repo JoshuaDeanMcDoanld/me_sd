@@ -333,11 +333,11 @@ class ServiceDesk
   class Request
     attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
 
-    def initialize(args)
-      if args[:url]
-        @id = args[:url][/WorkOrder\.do\?woMode=viewWO&woID=(?<ID>\d+)&&fromListView=true/, "ID"]
-      elsif args[:id]
-        @id = args[:id]
+    def initialize(arg)
+      if arg =~ /^\d+$/
+        @id = arg
+      elsif arg =~ /WorkOrder\.do\?woMode=viewWO&woID=(?<ID>\d+)&&fromListView=true/
+        @id = Regexp.last_match(:ID)
       end
     end
   end
