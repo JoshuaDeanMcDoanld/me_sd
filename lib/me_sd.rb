@@ -18,14 +18,6 @@
 class ServiceDesk
   attr_accessor :session, :errors, :curobj, :current_body, :requests, :last_error
 
-  HEADERS = {
-    "User-Agent" => "Mozilla/5.0 (Windows NT 6.1; rv:22.0) Gecko/20100101 Firefox/22.0",
-    "Accept" => "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language" => "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
-    "Accept-Encoding" => "gzip, deflate",
-    "Connection:" => "keep-alive",
-  }
-
   def initialize(host, port = 80, username, password)
     require "net/http"
     uri = URI("http://#{host}:#{port}")
@@ -52,7 +44,7 @@ class ServiceDesk
         "Referer" => "http://#{host}:#{port}",
         "Host" => "#{host}:#{port}",
         "Cookie" => "#{cookie};",
-      }.merge(HEADERS)
+      }
       request = http.post(uri, auth_data, auth_headers)
       @session = {
         host: host,
@@ -102,10 +94,10 @@ class ServiceDesk
         "Referer" => "http://#{session[:host]}:#{session[:port]}/WOListView.do",
         "Host" => "#{session[:host]}:#{session[:port]}",
         "Cookie" => "#{session[:cookie]}",
-      }.merge(HEADERS)
+      }
       request = http.post(uri, data, headers)
       @current_body = request.response.body
-      @curobj = get_curobj(@current_body)
+      @curobj = get_curobj
     end
   end
 
@@ -119,7 +111,7 @@ class ServiceDesk
     Net::HTTP.start(uri.host, uri.port) do |http|
       request = Net::HTTP::Get.new(uri)
       request.add_field("Referer", "http://#{session[:host]}:#{session[:port]}/WOListView.do")
-      @curobj = get_curobj(@current_body)
+      @curobj = get_curobj
       return false unless @curobj
       print "#{(@curobj["_FI"].to_f / @curobj["_TL"].to_f * 100).round}%.."
       # increment page number
@@ -140,20 +132,25 @@ class ServiceDesk
       @current_body = request.response.body
     end
     # if (first item + per page) > total items then it is the last page
-    return false if (@curobj["_FI"].to_i + @curobj["_PL"].to_i) > @curobj["_TL"].to_i
+    if (@curobj["_FI"].to_i + @curobj["_PL"].to_i) > @curobj["_TL"].to_i
+      print "100%.."
+      return false
+    end
     true
   end
 
-  def get_curobj(body)
+  def get_curobj
+    body = @current_body
     # somewhere in body
     # "<Script>curObj=V33;curObj[\"_PN\"]=\"1\";curObj[\"_PL\"]=\"25\";curObj[\"_TL\"]=\"28\";"\
     # "curObj[\"globalViewName\"]=\"All_Requests\";curObj[\"_TI\"]=\"25\";curObj[\"_FI\"]=\"1\";"\
     # "curObj[\"_SO\"]=\"D\";curObj[\"viewName\"]=\"All_Requests\";</Script>"
-    curobj_start_pos = body.index(/<Script>curObj=/)
-    v = /<Script>curObj=V(?<V>\d+);/.match(body)["V"]
+    search_start_str = "<Script>curObj=V"
+    curobj_start_pos = body.index(search_start_str)
     return false unless curobj_start_pos
+    v = /<Script>curObj=V(?<V>\d+);/.match(body)["V"]
     curobj_end_pos = body.index("</Script>", curobj_start_pos)
-    curobj_raw = body[curobj_start_pos + "<Script>curObj=".size + v.size...curobj_end_pos]
+    curobj_raw = body[curobj_start_pos + search_start_str.size + v.size...curobj_end_pos]
     # curobj_raw =>
     # "curObj[\"_PN\"]=\"1\";curObj[\"_PL\"]=\"25\";curObj[\"_TL\"]=\"28\";"\
     # "curObj[\"globalViewName\"]=\"All_Requests\";curObj[\"_TI\"]=\"25\";curObj[\"_FI\"]=\"1\";"\
@@ -171,7 +168,6 @@ class ServiceDesk
     urls = body.scan(/href=\"WorkOrder\.do\?woMode=viewWO&woID=\d+&&fromListView=true\"/)
     # drop href=" and ending quot
     urls.each_with_index { |url, i| urls[i] = url["href=\"".size..-2] }
-    urls
   end
 
   def get_request_data(args)
@@ -296,9 +292,7 @@ class ServiceDesk
     search_start_pos = @current_body.index(bounds[0])
     return false unless search_start_pos
     search_end_pos = @current_body.index(bounds[1], search_start_pos)
-    value = @current_body[search_start_pos + bounds[0].size..search_end_pos-1]
-    value = value.force_encoding("UTF-8")
-    value
+    @current_body[search_start_pos + bounds[0].size..search_end_pos-1].force_encoding("UTF-8")
   end
 
   def semicolon_space_value(value)
