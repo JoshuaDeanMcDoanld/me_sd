@@ -1,32 +1,34 @@
-# usage:
-#
 # sd = MESD.new("192.168.0.150", "8080", "user", "P@ssw0rd")
 # => true
 # unless sd.errors
 #   requests = sd.get_all_requests
 #   sd.get_request_data(requests[0])
-#   requests[0]
+#   requests[0].data
 # end
-# => #<MESD::Request:0x0000000265d360 @id="29", @description="request decription", @resolution="request resolution", ...>
-# request = MESD::Request.new({id: "117711"})
-# sd.get_request_data(request)
-# sd.last_error
-# => "auth error"
-# sd.get_request_data({ request: request, only: ["name"] })
-# => #<MESD::Request:0x000000023b6800 @id="29", @name="my_request">
+# => #<MESD::Request:0x0000000265d360 @id="29", ..., @description="request decription", @resolution="request resolution", ...>
+# request = Request.new({ session: sd.session, id: 29 })
+# sd.data(:name, :resolution)
+# => #<MESD::Request:0x000000023b6800 @id="29", ..., @name="my_request", @resolution="my_resolution">
 
 class MESD
-  attr_accessor :session, :last_error, :curobj, :current_body, :requests
+  attr_accessor :session, :last_error, :curobj, :current_body
 
   require "net/http"
   EXCEPTIONS = [Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, Errno::EHOSTUNREACH, EOFError,
    Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError]
 
-  def initialize(host, port = 80, username, password)
+  def initialize(args)
+    host = args[:host]
+    if args[:port]
+      port = args[:port]
+    else
+      port = "80"
+    end
+    username = args[:username]
+    password = args[:password]
     uri = URI("http://#{host}:#{port}")
     begin
       Net::HTTP.start(uri.host, uri.port) do |http|
-        p "here1"
         request = http.get(uri)
         cookie = request.response["set-cookie"]
         uri = "#{uri}/j_security_check"
@@ -56,7 +58,7 @@ class MESD
           port: port,
           cookie: cookie,
         }
-        @last_error = "wrong credentials" unless self.session_healthy?
+        @last_error = "wrong credentials" unless self.session_healthy?(self.session)
       end
     rescue *EXCEPTIONS => @last_error
     end
@@ -64,8 +66,7 @@ class MESD
 
   # logs in and tries to find out is session healthy
   # criteria: logout button is present
-  def session_healthy?
-    session = self.session
+  def session_healthy?(session)
     return false unless session
     session_healthy = false
     uri = URI("http://#{session[:host]}:#{session[:port]}/MySchedule.do")
@@ -85,15 +86,15 @@ class MESD
   end
 
   def get_all_requests
-    @requests = Array.new
+    requests = Array.new
     select_all_requests
     puts "Getting total #{@curobj['_TL']} requests:"
-    get_requests_urls(@current_body).each { |url| @requests.push(Request.new({url: url})) }
+    get_requests_urls(@current_body).each { |url| requests.push(Request.new({ session: @session, url: url })) }
     begin
       not_last_page = next_page
-      get_requests_urls(@current_body).each { |url| @requests.push(Request.new({url: url})) }
+      get_requests_urls(@current_body).each { |url| requests.push(Request.new({ session: @session, url: url })) }
     end while not_last_page
-    @requests
+    requests
   end
 
   def select_all_requests
@@ -152,7 +153,7 @@ class MESD
     end
     # if (first item + per page) > total items then it is the last page
     if (@curobj["_FI"].to_i + @curobj["_PL"].to_i) > @curobj["_TL"].to_i
-      print "100%.."
+      puts "100%"
       return false
     end
     true
@@ -189,40 +190,60 @@ class MESD
     urls.each_with_index { |url, i| urls[i] = url["href=\"".size..-2] }
   end
 
-  def get_request_data(args)
-    unless session_healthy?
+  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls
+
+end
+
+class Request < MESD
+  attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
+
+  def initialize(args)
+    if args[:id]
+      @id = args[:id]
+    elsif args[:url]
+      if args[:url] =~ /WorkOrder\.do\?woMode=viewWO&woID=(?<ID>\d+)&&fromListView=true/
+        @id = Regexp.last_match("ID").to_i
+      else
+        return false
+      end
+    end
+    @session = args[:session]
+    true
+  end
+
+  def data(*args)
+    return false unless self.id
+    if args.size == 0
+      only = []
+    else
+      only = args
+    end
+    unless session_healthy?(@session)
       @last_error = "session error"
       return false
     end
-    if args.class == MESD::Request
-      request = args
-      only = []
-    elsif args.class == Hash
-      request = args[:request]
-      only = defined?(args[:only]) ? args[:only] : []
-    end
     properties = [
       {
-        name: "description",
-        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        name: :description,
+        url: "WorkOrder.do?woMode=viewWO&woID=#{self.id}",
         search_function: {
-          name: "value_between_strings",
+          name: "value_between",
           args: ["<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
         },
         post_processing_functions: [:strip],
       },
       {
-        name: "resolution",
-        url: "AddResolution.do?mode=viewWOResolution&woID=#{request.id}",
+        name: :resolution,
+        url: "AddResolution.do?mode=viewWOResolution&woID=#{self.id}",
         search_function: {
-          name: "value_between_strings",
+          name: "value_between",
           args: ["<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
         },
         post_processing_functions: [:strip],
       },
       {
-        name: "status",
-        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        name: :status,
+        url: "WorkOrder.do?woMode=viewWO&woID=#{self.id}",
         search_function: {
           name: "html_parse",
           args: [["css", "#WOHeaderSummary_DIV"], ["css", "#status_PH"], "text"],
@@ -230,8 +251,8 @@ class MESD
         post_processing_functions: [:semicolon_space_value, :symbolize],
       },
       {
-        name: "priority",
-        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        name: :priority,
+        url: "WorkOrder.do?woMode=viewWO&woID=#{self.id}",
         search_function: {
           name: "html_parse",
           args: [["css", "#WOHeaderSummary_DIV"], ["css", "#priority_PH"], "text"],
@@ -239,24 +260,25 @@ class MESD
         post_processing_functions: [:semicolon_space_value, :symbolize],
       },
       {
-        name: "author_name",
-        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        name: :author_name,
+        url: "WorkOrder.do?woMode=viewWO&woID=#{self.id}",
         search_function: {
           name: "html_parse",
           args: [["css", "#requesterName_PH"], "text"],
         },
       },
       {
-        name: "create_date",
-        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        name: :create_date,
+        url: "WorkOrder.do?woMode=viewWO&woID=#{self.id}",
         search_function: {
           name: "html_parse",
           args: [["css", "#CREATEDTIME_CUR"], "text"],
         },
+        post_processing_functions: [:parse_date],
       },
       {
-        name: "name",
-        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        name: :name,
+        url: "WorkOrder.do?woMode=viewWO&woID=#{self.id}",
         search_function: {
           name: "html_parse",
           args: [["css", "#requestSubject_ID"], "text"],
@@ -278,6 +300,11 @@ class MESD
             @last_error = "auth error"
             return false
           end
+          permitions_error_pos = @current_body.index("Request does not fall under your permitted scope")
+          if permitions_error_pos
+            @last_error = "no permitions error"
+            return false
+          end
           operational_error_pos = @current_body.index("failurebox")
           if operational_error_pos
             @last_error = "operational error"
@@ -294,12 +321,12 @@ class MESD
               end
             end
           end
-          request.send("#{property[:name]}=", value)
+          self.send("#{property[:name]}=", value)
         end
       rescue *EXCEPTIONS => @last_error
       end
     end
-    request
+    self
   end
 
   def html_parse(steps)
@@ -309,15 +336,20 @@ class MESD
     value
   end
 
-  def value_between_strings(bounds)
+  def value_between(bounds)
     search_start_pos = @current_body.index(bounds[0])
-    return false unless search_start_pos
+    return "" unless search_start_pos
     search_end_pos = @current_body.index(bounds[1], search_start_pos)
     @current_body[search_start_pos + bounds[0].size..search_end_pos-1].force_encoding("UTF-8")
   end
 
   def semicolon_space_value(value)
     value.strip[/:(.*)/m, 1].strip
+  end
+
+  def parse_date(date)
+    require "date"
+    DateTime.parse(date)
   end
 
   def symbolize(value)
@@ -339,22 +371,9 @@ class MESD
     matching.each do |result, candidates|
       return result if candidates.include?(value)
     end
-    false
+    value.to_sym
   end
 
-  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls,
-    :html_parse, :value_between_strings, :semicolon_space_value, :symbolize
+  private :html_parse, :value_between, :semicolon_space_value, :parse_date, :symbolize
 
-end
-
-class Request < MESD
-  attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
-
-  def initialize(arg)
-    if arg =~ /^\d+$/
-      @id = arg
-    elsif arg =~ /WorkOrder\.do\?woMode=viewWO&woID=(?<ID>\d+)&&fromListView=true/
-      @id = Regexp.last_match(:ID)
-    end
-  end
 end
