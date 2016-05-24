@@ -1,57 +1,64 @@
 # usage:
 #
-# sd = ServiceDesk.new("192.168.0.150", "8080", "user", "P@ssw0rd")
+# sd = MESD.new("192.168.0.150", "8080", "user", "P@ssw0rd")
 # => true
 # unless sd.errors
 #   requests = sd.get_all_requests
 #   sd.get_request_data(requests[0])
 #   requests[0]
 # end
-# => #<ServiceDesk::Request:0x0000000265d360 @id="29", @description="request decription", @resolution="request resolution", ...>
-# request = ServiceDesk::Request.new({id: "117711"})
+# => #<MESD::Request:0x0000000265d360 @id="29", @description="request decription", @resolution="request resolution", ...>
+# request = MESD::Request.new({id: "117711"})
 # sd.get_request_data(request)
 # sd.last_error
 # => "auth error"
 # sd.get_request_data({ request: request, only: ["name"] })
-# => #<ServiceDesk::Request:0x000000023b6800 @id="29", @name="my_request">
+# => #<MESD::Request:0x000000023b6800 @id="29", @name="my_request">
 
-class ServiceDesk
-  attr_accessor :session, :errors, :curobj, :current_body, :requests, :last_error
+class MESD
+  attr_accessor :session, :last_error, :curobj, :current_body, :requests
+
+  require "net/http"
+  EXCEPTIONS = [Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, Errno::EHOSTUNREACH, EOFError,
+   Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError]
 
   def initialize(host, port = 80, username, password)
-    require "net/http"
     uri = URI("http://#{host}:#{port}")
-    Net::HTTP.start(uri.host, uri.port) do |http|
-      request = http.get(uri)
-      cookie = request.response["set-cookie"]
-      uri = "#{uri}/j_security_check"
-      auth_data = ""\
-        "j_username=#{username}&"\
-        "j_password=#{password}&"\
-        "AdEnable=false&"\
-        "DomainCount=0&"\
-        "LDAPEnable=false&"\
-        "LocalAuth=No&"\
-        "LocalAuthWithDomain=No&"\
-        "dynamicUserAddition_status=true&"\
-        "hidden=Select+a+Domain&"\
-        "hidden=For+Domain&"\
-        "localAuthEnable=true&"\
-        "loginButton=Login&"\
-        "logonDomainName=-1&"\
-      ""
-      auth_headers = {
-        "Referer" => "http://#{host}:#{port}",
-        "Host" => "#{host}:#{port}",
-        "Cookie" => "#{cookie};",
-      }
-      request = http.post(uri, auth_data, auth_headers)
-      @session = {
-        host: host,
-        port: port,
-        cookie: cookie,
-      }
-      @errors = ["Wrong username or password"] unless self.session_healthy?
+    begin
+      Net::HTTP.start(uri.host, uri.port) do |http|
+        p "here1"
+        request = http.get(uri)
+        cookie = request.response["set-cookie"]
+        uri = "#{uri}/j_security_check"
+        auth_data = ""\
+          "j_username=#{username}&"\
+          "j_password=#{password}&"\
+          "AdEnable=false&"\
+          "DomainCount=0&"\
+          "LDAPEnable=false&"\
+          "LocalAuth=No&"\
+          "LocalAuthWithDomain=No&"\
+          "dynamicUserAddition_status=true&"\
+          "hidden=Select+a+Domain&"\
+          "hidden=For+Domain&"\
+          "localAuthEnable=true&"\
+          "loginButton=Login&"\
+          "logonDomainName=-1&"\
+        ""
+        auth_headers = {
+          "Referer" => "http://#{host}:#{port}",
+          "Host" => "#{host}:#{port}",
+          "Cookie" => "#{cookie};",
+        }
+        request = http.post(uri, auth_data, auth_headers)
+        @session = {
+          host: host,
+          port: port,
+          cookie: cookie,
+        }
+        @last_error = "wrong credentials" unless self.session_healthy?
+      end
+    rescue *EXCEPTIONS => @last_error
     end
   end
 
@@ -59,16 +66,20 @@ class ServiceDesk
   # criteria: logout button is present
   def session_healthy?
     session = self.session
+    return false unless session
     session_healthy = false
     uri = URI("http://#{session[:host]}:#{session[:port]}/MySchedule.do")
-    Net::HTTP.start(uri.host, uri.port) do |http|
-      request = Net::HTTP::Get.new(uri)
-      request.add_field("Cookie", "#{session[:cookie]}")
-      request = http.request(request)
-      # ...
-      # <a style="display:inline" href="\&quot;javascript:" prelogout('null')\"="">Log out</a>
-      # ...
-      session_healthy = true if /preLogout/.match(request.body)
+    begin
+      Net::HTTP.start(uri.host, uri.port) do |http|
+        request = Net::HTTP::Get.new(uri)
+        request.add_field("Cookie", "#{session[:cookie]}")
+        request = http.request(request)
+        # ...
+        # <a style="display:inline" href="\&quot;javascript:" prelogout('null')\"="">Log out</a>
+        # ...
+        session_healthy = true if /preLogout/.match(request.body)
+      end
+    rescue *EXCEPTIONS => @last_error
     end
     session_healthy
   end
@@ -87,49 +98,57 @@ class ServiceDesk
 
   def select_all_requests
     session = self.session
+    return false unless session
     uri = URI("http://#{session[:host]}:#{session[:port]}/WOListView.do")
-    Net::HTTP.start(uri.host, uri.port) do |http|
-      data = "globalViewName=All_Requests&viewName=All_Requests"
-      headers = {
-        "Referer" => "http://#{session[:host]}:#{session[:port]}/WOListView.do",
-        "Host" => "#{session[:host]}:#{session[:port]}",
-        "Cookie" => "#{session[:cookie]}",
-      }
-      request = http.post(uri, data, headers)
-      @current_body = request.response.body
-      @curobj = get_curobj
+    begin
+      Net::HTTP.start(uri.host, uri.port) do |http|
+        data = "globalViewName=All_Requests&viewName=All_Requests"
+        headers = {
+          "Referer" => "http://#{session[:host]}:#{session[:port]}/WOListView.do",
+          "Host" => "#{session[:host]}:#{session[:port]}",
+          "Cookie" => "#{session[:cookie]}",
+        }
+        request = http.post(uri, data, headers)
+        @current_body = request.response.body
+        @curobj = get_curobj
+      end
+    rescue *EXCEPTIONS => @last_error
     end
   end
 
   def next_page
     require "date"
     session = self.session
+    return false unless session
     # 13 digits time
     timestamp = DateTime.now.strftime("%Q")
     uri = URI("http://#{session[:host]}:#{session[:port]}/STATE_ID/#{timestamp}/"\
       "RequestsView.cc?UNIQUE_ID=RequestsView&SUBREQUEST=true")
-    Net::HTTP.start(uri.host, uri.port) do |http|
-      request = Net::HTTP::Get.new(uri)
-      request.add_field("Referer", "http://#{session[:host]}:#{session[:port]}/WOListView.do")
-      @curobj = get_curobj
-      return false unless @curobj
-      print "#{(@curobj["_FI"].to_f / @curobj["_TL"].to_f * 100).round}%.."
-      # increment page number
-      @curobj["_PN"] = (@curobj["_PN"].to_i + 1).to_s
-      # update first item
-      @curobj["_FI"] = (@curobj["_FI"].to_i + @curobj["_PL"].to_i).to_s
-      # @curobj.flatten.join("/") =>
-      # "_PN/2/_PL/25/_TL/28/globalViewName/All_Requests/_TI/25/_FI/1/_SO/D/viewName/All_Requests"
-      request.add_field("Cookie",
-        "#{session[:cookie]}; "\
-        "STATE_COOKIE=%26RequestsView/ID/#{@curobj['ID']}/VGT/#{timestamp}/#{@curobj.flatten.join('/')}"\
-        "/_VMD/1/ORIGROOT/#{@curobj['ID']}%26_REQS/_RVID/RequestsView/_TIME/#{timestamp}; "\
-        "301RequestsshowThreadedReq=showThreadedReqshow; "\
-        "301RequestshideThreadedReq=hideThreadedReqhide"\
-        ""
-      )
-      request = http.request(request)
-      @current_body = request.response.body
+    begin
+      Net::HTTP.start(uri.host, uri.port) do |http|
+        request = Net::HTTP::Get.new(uri)
+        request.add_field("Referer", "http://#{session[:host]}:#{session[:port]}/WOListView.do")
+        @curobj = get_curobj
+        return false unless @curobj
+        print "#{(@curobj["_FI"].to_f / @curobj["_TL"].to_f * 100).round}%.."
+        # increment page number
+        @curobj["_PN"] = (@curobj["_PN"].to_i + 1).to_s
+        # update first item
+        @curobj["_FI"] = (@curobj["_FI"].to_i + @curobj["_PL"].to_i).to_s
+        # @curobj.flatten.join("/") =>
+        # "_PN/2/_PL/25/_TL/28/globalViewName/All_Requests/_TI/25/_FI/1/_SO/D/viewName/All_Requests"
+        request.add_field("Cookie",
+          "#{session[:cookie]}; "\
+          "STATE_COOKIE=%26RequestsView/ID/#{@curobj['ID']}/VGT/#{timestamp}/#{@curobj.flatten.join('/')}"\
+          "/_VMD/1/ORIGROOT/#{@curobj['ID']}%26_REQS/_RVID/RequestsView/_TIME/#{timestamp}; "\
+          "301RequestsshowThreadedReq=showThreadedReqshow; "\
+          "301RequestshideThreadedReq=hideThreadedReqhide"\
+          ""
+        )
+        request = http.request(request)
+        @current_body = request.response.body
+      end
+    rescue *EXCEPTIONS => @last_error
     end
     # if (first item + per page) > total items then it is the last page
     if (@curobj["_FI"].to_i + @curobj["_PL"].to_i) > @curobj["_TL"].to_i
@@ -171,80 +190,84 @@ class ServiceDesk
   end
 
   def get_request_data(args)
-    if args.class == ServiceDesk::Request
+    unless session_healthy?
+      @last_error = "session error"
+      return false
+    end
+    if args.class == MESD::Request
       request = args
       only = []
     elsif args.class == Hash
       request = args[:request]
       only = defined?(args[:only]) ? args[:only] : []
     end
-    if session_healthy?
-      properties = [
-        {
-          name: "description",
-          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
-          search_function: {
-            name: "value_between_strings",
-            args: ["<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
-          },
-          post_processing_functions: [:strip],
+    properties = [
+      {
+        name: "description",
+        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        search_function: {
+          name: "value_between_strings",
+          args: ["<td style=\"padding-left:10px;\" colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
         },
-        {
-          name: "resolution",
-          url: "AddResolution.do?mode=viewWOResolution&woID=#{request.id}",
-          search_function: {
-            name: "value_between_strings",
-            args: ["<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
-          },
-          post_processing_functions: [:strip],
+        post_processing_functions: [:strip],
+      },
+      {
+        name: "resolution",
+        url: "AddResolution.do?mode=viewWOResolution&woID=#{request.id}",
+        search_function: {
+          name: "value_between_strings",
+          args: ["<td colspan=\"3\" valign=\"top\" class=\"fontBlack textareadesc\">", "</td>"],
         },
-        {
-          name: "status",
-          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
-          search_function: {
-            name: "html_parse",
-            args: [["css", "#WOHeaderSummary_DIV"], ["css", "#status_PH"], "text"],
-          },
-          post_processing_functions: [:semicolon_space_value, :symbolize],
+        post_processing_functions: [:strip],
+      },
+      {
+        name: "status",
+        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        search_function: {
+          name: "html_parse",
+          args: [["css", "#WOHeaderSummary_DIV"], ["css", "#status_PH"], "text"],
         },
-        {
-          name: "priority",
-          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
-          search_function: {
-            name: "html_parse",
-            args: [["css", "#WOHeaderSummary_DIV"], ["css", "#priority_PH"], "text"],
-          },
-          post_processing_functions: [:semicolon_space_value, :symbolize],
+        post_processing_functions: [:semicolon_space_value, :symbolize],
+      },
+      {
+        name: "priority",
+        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        search_function: {
+          name: "html_parse",
+          args: [["css", "#WOHeaderSummary_DIV"], ["css", "#priority_PH"], "text"],
         },
-        {
-          name: "author_name",
-          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
-          search_function: {
-            name: "html_parse",
-            args: [["css", "#requesterName_PH"], "text"],
-          },
+        post_processing_functions: [:semicolon_space_value, :symbolize],
+      },
+      {
+        name: "author_name",
+        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        search_function: {
+          name: "html_parse",
+          args: [["css", "#requesterName_PH"], "text"],
         },
-        {
-          name: "create_date",
-          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
-          search_function: {
-            name: "html_parse",
-            args: [["css", "#CREATEDTIME_CUR"], "text"],
-          },
+      },
+      {
+        name: "create_date",
+        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        search_function: {
+          name: "html_parse",
+          args: [["css", "#CREATEDTIME_CUR"], "text"],
         },
-        {
-          name: "name",
-          url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
-          search_function: {
-            name: "html_parse",
-            args: [["css", "#requestSubject_ID"], "text"],
-          },
-          post_processing_functions: [:strip],
+      },
+      {
+        name: "name",
+        url: "WorkOrder.do?woMode=viewWO&woID=#{request.id}",
+        search_function: {
+          name: "html_parse",
+          args: [["css", "#requestSubject_ID"], "text"],
         },
-      ]
-      properties.each do |property|
-        next if !only.empty? && !only.include?(property[:name])
-        uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
+        post_processing_functions: [:strip],
+      },
+    ]
+    properties.each do |property|
+      next if !only.empty? && !only.include?(property[:name])
+      uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
+      begin
         Net::HTTP.start(uri.host, uri.port) do |http|
           http_request = Net::HTTP::Get.new(uri)
           http_request.add_field("Cookie", "#{@session[:cookie]}")
@@ -273,12 +296,10 @@ class ServiceDesk
           end
           request.send("#{property[:name]}=", value)
         end
+      rescue *EXCEPTIONS => @last_error
       end
-      request
-    else
-      @last_error = "session error"
-      return false
     end
+    request
   end
 
   def html_parse(steps)
@@ -324,15 +345,16 @@ class ServiceDesk
   private :select_all_requests, :next_page, :get_curobj, :get_requests_urls,
     :html_parse, :value_between_strings, :semicolon_space_value, :symbolize
 
-  class Request
-    attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
+end
 
-    def initialize(arg)
-      if arg =~ /^\d+$/
-        @id = arg
-      elsif arg =~ /WorkOrder\.do\?woMode=viewWO&woID=(?<ID>\d+)&&fromListView=true/
-        @id = Regexp.last_match(:ID)
-      end
+class Request < MESD
+  attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
+
+  def initialize(arg)
+    if arg =~ /^\d+$/
+      @id = arg
+    elsif arg =~ /WorkOrder\.do\?woMode=viewWO&woID=(?<ID>\d+)&&fromListView=true/
+      @id = Regexp.last_match(:ID)
     end
   end
 end
