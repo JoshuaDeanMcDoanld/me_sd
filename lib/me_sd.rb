@@ -19,11 +19,7 @@ class MESD
 
   def initialize(args)
     host = args[:host]
-    if args[:port]
-      port = args[:port]
-    else
-      port = "80"
-    end
+    port = args[:port] || "80"
     username = args[:username]
     password = args[:password]
     uri = URI("http://#{host}:#{port}")
