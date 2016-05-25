@@ -23,7 +23,8 @@ RSpec.describe MESD do
     it "should get last n requests" do
       last_requests = sd.get_last_requests(10)
       expect(last_requests.size).to eq(10)
-      p last_requests[0]
+      last_request_id = sd_data["last_request_id"]
+      expect(last_requests[0].id ).to eq(last_request_id.to_s)
     end
 
     it "should get custom request data" do
