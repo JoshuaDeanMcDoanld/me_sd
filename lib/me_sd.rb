@@ -85,15 +85,29 @@ class MESD
   end
 
   def get_all_requests
-    requests = Array.new
+    get_last_requests(-1)
+  end
+
+  def get_last_requests(number)
+    if number < -1
+      @last_error = "wrong requests number"
+      return false
+    end
     select_all_requests
-    puts "Getting total #{@curobj['_TL']} requests:"
+    if number == -1
+      puts "Getting total #{@curobj['_TL']} requests:"
+    else
+      puts "Getting last #{number} of maximum #{@curobj['_TL']} requests:"
+    end
+    requests = Array.new
     get_requests_urls(@current_body).each { |url| requests.push(Request.new({ session: @session, url: url })) }
     begin
-      not_last_page = next_page
+      there_are_more_pages = next_page
       get_requests_urls(@current_body).each { |url| requests.push(Request.new({ session: @session, url: url })) }
-    end while not_last_page
-    requests
+      break unless requests.size < number
+      break unless there_are_more_pages
+    end while true
+    requests[0..number-1]
   end
 
   def select_all_requests
@@ -130,7 +144,7 @@ class MESD
         request.add_field("Referer", "http://#{session[:host]}:#{session[:port]}/WOListView.do")
         @curobj = get_curobj
         return false unless @curobj
-        print "#{(@curobj["_FI"].to_f / @curobj["_TL"].to_f * 100).round}%.."
+        print "#{@curobj["_PN"]}/#{(@curobj["_TL"].to_i / @curobj["_PL"].to_f).ceil}.."
         # increment page number
         @curobj["_PN"] = (@curobj["_PN"].to_i + 1).to_s
         # update first item
@@ -151,10 +165,7 @@ class MESD
     rescue *EXCEPTIONS => @last_error
     end
     # if (first item + per page) > total items then it is the last page
-    if (@curobj["_FI"].to_i + @curobj["_PL"].to_i) > @curobj["_TL"].to_i
-      puts "100%"
-      return false
-    end
+    return false if (@curobj["_FI"].to_i + @curobj["_PL"].to_i) > @curobj["_TL"].to_i
     true
   end
 
