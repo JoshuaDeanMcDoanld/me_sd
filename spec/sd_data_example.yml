@@ -3,6 +3,7 @@ port: 8080
 username: username
 password: password
 all_requests_size: 1
+last_request_id: 1
 bad_request:
   id: not an id
 good_request:
