@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name        = "me_sd"
-  s.version     = "0.0.2beta"
+  s.version     = "0.0.3beta"
   s.date        = "2016-05-19"
   s.summary     = "ManageEngine ServiceDesk Plus gem"
   s.description = "Introduces 'MESD' class that works with ManageEngine ServiceDesk Plus without API access."
@@ -9,4 +9,6 @@ Gem::Specification.new do |s|
   s.files       = ["lib/me_sd.rb"]
   s.homepage    = "https://github.com/kengho/me_sd"
   s.license     = "MIT"
+
+  s.add_runtime_dependency "nokogiri", "~> 1"
 end

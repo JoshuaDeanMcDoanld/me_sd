@@ -1,14 +1,17 @@
-# sd = MESD.new("192.168.0.150", "8080", "user", "P@ssw0rd")
+# require "me_sd"
+# sd = MESD.new({ host: "192.168.0.150", port: "8080", username: "user", password: "P@ssw0rd" })
+# # default port is "80"
 # => true
 # unless sd.errors
 #   requests = sd.get_all_requests
-#   sd.get_request_data(requests[0])
 #   requests[0].data
 # end
 # => #<MESD::Request:0x0000000265d360 @id="29", ..., @description="request decription", @resolution="request resolution", ...>
 # request = Request.new({ session: sd.session, id: 29 })
-# sd.data(:name, :resolution)
-# => #<MESD::Request:0x000000023b6800 @id="29", ..., @name="my_request", @resolution="my_resolution">
+# request.data(:name, :resolution)
+# => #<MESD::Request:0x000000023b6800 @id="29", ..., @name="request name", @resolution="request resolution">
+# request.get_resolution
+# => "request resolution"
 
 class MESD
   attr_accessor :session, :last_error, :curobj, :current_body
@@ -187,11 +190,19 @@ class MESD
   end
 
   private :select_all_requests, :next_page, :get_curobj, :get_requests_urls
-
 end
 
 class Request < MESD
-  attr_accessor :id, :name, :author_name, :status, :priority, :create_date, :description, :resolution
+  props = [:name, :author_name, :status, :priority, :create_date, :description, :resolution]
+  attr_accessor :id, *props
+
+  # shortens "request.data(:resolution).resolution" to "request.get_resolution"
+  props.each do |prop|
+    define_method("get_#{prop.to_s}") do
+      request = self.data(prop)
+      request.send("#{prop.to_s}")
+    end
+  end
 
   def initialize(args)
     if args[:id]
@@ -218,7 +229,7 @@ class Request < MESD
       @last_error = "session error"
       return false
     end
-    properties = [
+    props = [
       {
         name: :description,
         url: "WorkOrder.do?woMode=viewWO&woID=#{self.id}",
@@ -282,7 +293,7 @@ class Request < MESD
         post_processing_functions: [:strip],
       },
     ]
-    properties.each do |property|
+    props.each do |property|
       next if !only.empty? && !only.include?(property[:name])
       uri = URI("http://#{@session[:host]}:#{@session[:port]}/#{property[:url]}")
       begin
@@ -371,5 +382,4 @@ class Request < MESD
   end
 
   private :html_parse, :value_between, :semicolon_space_value, :parse_date, :symbolize
-
 end
