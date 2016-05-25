@@ -85,16 +85,16 @@ class MESD
   end
 
   def get_all_requests
-    get_last_requests(-1)
+    get_last_requests(0)
   end
 
   def get_last_requests(number)
-    if number < -1
+    if number < 0
       @last_error = "wrong requests number"
       return false
     end
     select_all_requests
-    if number == -1
+    if number == 0
       puts "Getting total #{@curobj['_TL']} requests:"
     else
       puts "Getting last #{number} of maximum #{@curobj['_TL']} requests:"
