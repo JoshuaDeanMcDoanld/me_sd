@@ -209,7 +209,7 @@ class Request < MESD
       @id = args[:id]
     elsif args[:url]
       if args[:url] =~ /WorkOrder\.do\?woMode=viewWO&woID=(?<ID>\d+)&&fromListView=true/
-        @id = Regexp.last_match("ID").to_i
+        @id = Regexp.last_match("ID")
       else
         return false
       end
