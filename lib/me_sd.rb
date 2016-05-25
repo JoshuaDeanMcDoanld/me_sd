@@ -2,7 +2,7 @@ class MESD
   attr_accessor :session, :last_error, :curobj, :current_body
 
   require "net/http"
-  EXCEPTIONS = [Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, Errno::EHOSTUNREACH, EOFError,
+  EXCEPTIONS = [Timeout::Error, Errno::EINVAL, Errno::ECONNRESET, Errno::EHOSTUNREACH, Errno::ECONNREFUSED, EOFError,
    Net::HTTPBadResponse, Net::HTTPHeaderSyntaxError, Net::ProtocolError]
 
   def initialize(args)
