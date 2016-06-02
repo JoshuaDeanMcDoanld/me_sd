@@ -230,7 +230,10 @@ class Request < MESD
   end
 
   def data(*args)
-    return false unless self.id
+    unless self.id
+      @last_error = "id error"
+      return false
+    end
     if args.size == 0
       only = []
     else

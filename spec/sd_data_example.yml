@@ -1,0 +1,16 @@
+host: 192.168.0.2
+port: 8080
+username: user
+password: P@ssw0rd
+all_requests_size: 1
+bad_request:
+  id: not an id
+good_request:
+  id: 1
+  name: filler021
+  description: decription29
+  resolution: resolved29
+  status: :open
+  priority: :low
+  author_name: user
+  create_date: May 16, 2016 11:55 PM

@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name        = "me_sd"
-  s.version     = "0.0.3beta"
-  s.date        = "2016-05-19"
+  s.version     = "0.1"
+  s.date        = "2016-06-2"
   s.summary     = "ManageEngine ServiceDesk Plus gem"
   s.description = "Introduces 'MESD' class that works with ManageEngine ServiceDesk Plus without API access."
   s.authors     = ["Alexander Morozov"]
