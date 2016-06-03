@@ -1,18 +1,3 @@
-# require "me_sd"
-# sd = MESD.new({ host: "192.168.0.150", port: "8080", username: "user", password: "P@ssw0rd" })
-# # default port is "80"
-# => true
-# unless sd.errors
-#   requests = sd.get_all_requests
-#   requests[0].data
-# end
-# => #<MESD::Request:0x0000000265d360 @id="29", ..., @description="request decription", @resolution="request resolution", ...>
-# request = Request.new({ session: sd.session, id: 29 })
-# request.data(:name, :resolution)
-# => #<MESD::Request:0x000000023b6800 @id="29", ..., @name="request name", @resolution="request resolution">
-# request.get_resolution
-# => "request resolution"
-
 class MESD
   attr_accessor :session, :last_error, :curobj, :current_body
 
