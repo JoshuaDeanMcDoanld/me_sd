@@ -1,15 +1,15 @@
 host: 192.168.0.2
 port: 8080
-username: user
-password: P@ssw0rd
+username: username
+password: password
 all_requests_size: 1
 bad_request:
   id: not an id
 good_request:
   id: 1
-  name: filler021
-  description: decription29
-  resolution: resolved29
+  name: name1
+  description: description1
+  resolution: resolution1
   status: :open
   priority: :low
   author_name: user
