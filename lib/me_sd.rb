@@ -89,7 +89,7 @@ class MESD
     begin
       there_are_more_pages = next_page
       get_requests_urls(@current_body).each { |url| requests.push(Request.new({ session: @session, url: url })) }
-      break unless requests.size < number
+      break unless requests.size < number if number != 0
       break unless there_are_more_pages
     end while true
     requests[0..number-1]
@@ -97,7 +97,10 @@ class MESD
 
   def select_all_requests
     session = self.session
-    return false unless session
+    unless session
+      @last_error = "session error"
+      return false
+    end
     uri = URI("http://#{session[:host]}:#{session[:port]}/WOListView.do")
     begin
       Net::HTTP.start(uri.host, uri.port) do |http|
@@ -118,7 +121,10 @@ class MESD
   def next_page
     require "date"
     session = self.session
-    return false unless session
+    unless session
+      @last_error = "session error"
+      return false
+    end
     # 13 digits time
     timestamp = DateTime.now.strftime("%Q")
     uri = URI("http://#{session[:host]}:#{session[:port]}/STATE_ID/#{timestamp}/"\
@@ -128,7 +134,10 @@ class MESD
         request = Net::HTTP::Get.new(uri)
         request.add_field("Referer", "http://#{session[:host]}:#{session[:port]}/WOListView.do")
         @curobj = get_curobj
-        return false unless @curobj
+        unless @curobj
+          @last_error = "curobj error"
+          return false
+        end
         print "#{@curobj["_PN"]}/#{(@curobj["_TL"].to_i / @curobj["_PL"].to_f).ceil}.."
         # increment page number
         @curobj["_PN"] = (@curobj["_PN"].to_i + 1).to_s
