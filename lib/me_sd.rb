@@ -116,6 +116,35 @@ class MESD
       end
     rescue *EXCEPTIONS => @last_error
     end
+    sort_desc
+  end
+
+  def sort_desc
+    if @curobj["_SO"] == "A"
+      timestamp = DateTime.now.strftime("%Q")
+      uri = URI("http://#{session[:host]}:#{session[:port]}/STATE_ID/#{timestamp}/"\
+        "RequestsView.cc?UNIQUE_ID=RequestsView&SUBREQUEST=true")
+      begin
+        Net::HTTP.start(uri.host, uri.port) do |http|
+          request = Net::HTTP::Get.new(uri)
+          request.add_field("Referer", "http://#{session[:host]}:#{session[:port]}/WOListView.do")
+          @curobj["_SO"] = "D"
+          @curobj["_SB"] = "WOID"
+          @curobj.reject! { |key, _| key == "_TI" || key == "_PN" }
+          request.add_field("Cookie",
+            "#{session[:cookie]}; "\
+            "STATE_COOKIE=%26RequestsView/ID/#{@curobj['ID']}/VGT/#{timestamp}/#{@curobj.flatten.join('/')}"\
+            "/_VMD/1/ORIGROOT/#{@curobj['ID']}%26_REQS/_RVID/RequestsView/_TIME/#{timestamp}; "\
+            "301RequestsshowThreadedReq=showThreadedReqshow; "\
+            "301RequestshideThreadedReq=hideThreadedReqhide"\
+            ""
+          )
+          request = http.request(request)
+          @current_body = request.response.body
+        end
+      rescue *EXCEPTIONS => @last_error
+      end
+    end
   end
 
   def next_page
@@ -194,7 +223,7 @@ class MESD
     urls.each_with_index { |url, i| urls[i] = url["href=\"".size..-2] }
   end
 
-  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls
+  private :select_all_requests, :next_page, :get_curobj, :get_requests_urls, :sort_desc
 end
 
 class Request < MESD
